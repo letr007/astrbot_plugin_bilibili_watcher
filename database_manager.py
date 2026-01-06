@@ -232,14 +232,51 @@ class DatabaseManager:
             logger.error(f"获取最后更新时间失败: {e}")
             return None
     
-    def get_recent_likes(self, user_mid: int, limit: int = 5) -> List[Dict]:
-        """获取用户最近的点赞视频"""
+    def get_recent_likes(self, user_mid: int, limit: int = 5, fields: List[str] = None) -> List[Dict]:
+        """获取用户最近的点赞视频
+        
+        Args:
+            user_mid: 用户MID
+            limit: 返回数量限制
+            fields: 指定返回的字段列表，如果为None则返回所有字段
+            
+        Returns:
+            视频信息字典列表
+        """
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
             
-            cursor.execute('''
-            SELECT v.aid, v.bvid, v.title, v.owner_name, v.pubdate, ul.collect_time
+            # 默认字段
+            default_fields = ['aid', 'bvid', 'title', 'owner_name', 'pubdate', 'collect_time']
+            
+            if fields is None:
+                fields = default_fields
+            
+            # 构建SELECT子句
+            field_mapping = {
+                'aid': 'v.aid',
+                'bvid': 'v.bvid',
+                'title': 'v.title',
+                'owner_name': 'v.owner_name',
+                'pubdate': 'v.pubdate',
+                'collect_time': 'ul.collect_time',
+                'owner_mid': 'v.owner_mid',
+                'pic': 'v.pic'
+            }
+            
+            select_fields = []
+            for field in fields:
+                if field in field_mapping:
+                    select_fields.append(f"{field_mapping[field]} as {field}")
+                else:
+                    # 如果字段不在映射中，使用原字段名
+                    select_fields.append(field)
+            
+            select_clause = ', '.join(select_fields)
+            
+            cursor.execute(f'''
+            SELECT {select_clause}
             FROM user_likes ul
             JOIN videos v ON ul.aid = v.aid
             WHERE ul.user_mid = ?
@@ -253,14 +290,10 @@ class DatabaseManager:
             # 转换为字典列表
             result = []
             for row in rows:
-                result.append({
-                    'aid': row[0],
-                    'bvid': row[1],
-                    'title': row[2],
-                    'owner_name': row[3],
-                    'pubdate': row[4],
-                    'collect_time': row[5]
-                })
+                video_dict = {}
+                for i, field in enumerate(fields):
+                    video_dict[field] = row[i]
+                result.append(video_dict)
             
             return result
             

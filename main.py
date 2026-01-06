@@ -77,31 +77,67 @@ class BilibiliWatcher(Star):
         /watch <uid> --update           # 强制更新
         /watch <uid> --stats            # 显示统计信息
         /watch <uid> --recent <n>       # 显示最近n个点赞
+        /watch <uid> --recent <n> --simple   # 简单模式显示
+        /watch <uid> --recent <n> --full     # 完整模式显示
+        /watch <uid> --recent <n> --fields title,owner,date  # 自定义字段
         """
-        pattern = r'^watch\s+(\d+)(?:\s+(--\w+)(?:\s+(\d+))?)?$'
-        match = re.match(pattern, message.strip())
-        
-        if not match:
+        # 移除命令前缀
+        cmd_text = message.strip()
+        if not cmd_text.startswith('watch'):
             return None
         
-        uid = int(match.group(1))
-        option = match.group(2) if match.group(2) else None
-        option_value = match.group(3) if match.group(3) else None
+        # 提取命令参数部分
+        cmd_text = cmd_text[7:].strip()  # 移除"/watch "
+        
+        # 解析UID
+        parts = cmd_text.split()
+        if not parts:
+            return None
+        
+        try:
+            uid = int(parts[0])
+        except ValueError:
+            return None
         
         params = {
             'uid': uid,
             'action': 'query',  # 默认操作
+            'limit': 5,  # 默认显示5个
+            'detail_level': 'normal',  # 默认详细度
+            'fields': ['title', 'owner_name', 'pubdate']  # 默认字段
         }
         
-        if option == '--update':
-            params['action'] = 'update'
-        elif option == '--stats':
-            params['action'] = 'stats'
-        elif option == '--recent':
-            params['action'] = 'recent'
-            params['limit'] = int(option_value) if option_value else 5
-        elif option == '--help':
-            params['action'] = 'help'
+        # 解析选项
+        i = 1
+        while i < len(parts):
+            option = parts[i]
+            
+            if option == '--update':
+                params['action'] = 'update'
+            elif option == '--stats':
+                params['action'] = 'stats'
+            elif option == '--recent':
+                params['action'] = 'recent'
+                # 检查下一个参数是否为数字
+                if i + 1 < len(parts) and parts[i + 1].isdigit():
+                    params['limit'] = int(parts[i + 1])
+                    i += 1
+            elif option == '--simple':
+                params['detail_level'] = 'simple'
+                params['fields'] = ['title']
+            elif option == '--full':
+                params['detail_level'] = 'full'
+                params['fields'] = ['title', 'owner_name', 'pubdate', 'bvid', 'collect_time']
+            elif option == '--fields':
+                if i + 1 < len(parts):
+                    fields_str = parts[i + 1]
+                    params['detail_level'] = 'custom'
+                    params['fields'] = [field.strip() for field in fields_str.split(',')]
+                    i += 1
+            elif option == '--help':
+                params['action'] = 'help'
+            
+            i += 1
         
         return params
     
@@ -214,16 +250,58 @@ class BilibiliWatcher(Star):
                 return "❌ 数据库未初始化"
             
             limit = params.get('limit', 5)
-            recent_likes = self.db.get_recent_likes(uid, limit)
+            detail_level = params.get('detail_level', 'normal')
+            fields = params.get('fields', ['title', 'owner_name', 'pubdate'])
+            
+            # 根据详细度级别调整字段
+            if detail_level == 'simple':
+                fields = ['title']
+            elif detail_level == 'full':
+                fields = ['title', 'owner_name', 'pubdate', 'bvid', 'collect_time']
+            # custom级别使用params中指定的fields
+            
+            recent_likes = self.db.get_recent_likes(uid, limit, fields)
             
             if not recent_likes:
                 return f"📭 用户 {uid} 暂无点赞记录"
             
-            response = f"📅 用户 {uid} 最近 {len(recent_likes)} 个点赞视频:\n"
+            response = f"📅 用户 {uid} 最近 {len(recent_likes)} 个点赞视频"
+            if detail_level != 'normal':
+                response += f" ({detail_level}模式)"
+            response += ":\n"
+            
             for i, like in enumerate(recent_likes, 1):
-                title = like['title'][:30] + "..." if len(like['title']) > 30 else like['title']
+                # 标题处理
+                title = like.get('title', '未知标题')
+                if len(title) > 30:
+                    title = title[:30] + "..."
+                
                 response += f"{i}. {title}\n"
-                response += f"   👤 {like['owner_name']} | 📅 {self._format_timestamp(like['pubdate'])}\n"
+                
+                # 根据字段显示详细信息
+                if 'owner_name' in like and like['owner_name']:
+                    response += f"   👤 {like['owner_name']}"
+                
+                if 'pubdate' in like and like['pubdate']:
+                    if 'owner_name' in like:
+                        response += " | "
+                    else:
+                        response += "   "
+                    response += f"📅 {self._format_timestamp(like['pubdate'])}"
+                
+                if 'bvid' in like and like['bvid'] and detail_level == 'full':
+                    response += f" | 🔗 {like['bvid']}"
+                
+                if 'collect_time' in like and like['collect_time'] and detail_level == 'full':
+                    collect_time = like['collect_time']
+                    if isinstance(collect_time, str):
+                        response += f" | ⏰ {collect_time[:10]}"
+                
+                response += "\n"
+            
+            # 添加使用提示
+            if detail_level == 'normal':
+                response += "\n💡 提示: 使用 --simple 显示简洁版，--full 显示完整版，或 --fields 自定义字段"
             
             return response
         
@@ -313,12 +391,20 @@ class BilibiliWatcher(Star):
                 "• --update    强制更新用户的点赞视频数据\n"
                 "• --stats     显示用户的详细统计信息\n"
                 "• --recent N  显示用户最近N个点赞视频（默认5个）\n"
+                "• --simple    简洁模式显示（仅标题）\n"
+                "• --full      完整模式显示（包含所有字段）\n"
+                "• --fields f1,f2,... 自定义显示字段\n"
                 "• --help      显示此帮助信息\n"
                 "\n"
+                "可用字段: title, owner_name, pubdate, bvid, collect_time, owner_mid, pic\n"
+                "\n"
                 "示例:\n"
-                "/watch 123456           # 查询用户信息\n"
-                "/watch 123456 --update  # 更新用户数据\n"
-                "/watch 123456 --recent 3 # 显示最近3个点赞"
+                "/watch 123456                    # 查询用户信息\n"
+                "/watch 123456 --update           # 更新用户数据\n"
+                "/watch 123456 --recent 3         # 显示最近3个点赞\n"
+                "/watch 123456 --recent 5 --simple # 简洁模式显示5个\n"
+                "/watch 123456 --recent 3 --full  # 完整模式显示3个\n"
+                "/watch 123456 --recent 5 --fields title,owner_name  # 自定义字段"
             )
             return
         
@@ -361,10 +447,16 @@ class BilibiliWatcher(Star):
             "• 监控B站用户的点赞视频\n"
             "• 查询用户点赞统计信息\n"
             "• 自动缓存和更新数据\n"
+            "• 支持多种显示模式（简洁/完整/自定义）\n"
             "\n"
             "主要命令:\n"
             "• /watch <uid> [选项]  - 监控用户点赞视频\n"
             "• /bilihelp            - 显示此帮助信息\n"
+            "\n"
+            "高级功能:\n"
+            "• 支持控制显示视频个数 (--recent N)\n"
+            "• 支持控制信息详细度 (--simple/--full)\n"
+            "• 支持自定义显示字段 (--fields field1,field2)\n"
             "\n"
             "使用 /watch <uid> --help 查看详细命令帮助"
         )
