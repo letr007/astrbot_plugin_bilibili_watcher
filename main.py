@@ -14,8 +14,8 @@ from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 
 # 导入自定义模块
-from bilibili_api import BilibiliAPI
-from database_manager import DatabaseManager
+from .bilibili_api import BilibiliAPI
+from .database_manager import DatabaseManager
 
 
 @register("bilibili_watcher", "B站监控插件", "监控B站用户的点赞视频，提供查询和更新功能", "1.0.0")
