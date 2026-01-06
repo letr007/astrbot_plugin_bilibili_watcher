@@ -283,9 +283,9 @@ class BilibiliWatcher(Star):
           --recent N  显示最近N个点赞视频
           --help      显示帮助信息
         """
-        # 检查是否为唤醒命令
-        if event.is_at_or_wake_command:
-            return
+        # # 检查是否为唤醒命令
+        # if event.is_at_or_wake_command:
+        #     return
         
         message = event.message_str
         
@@ -348,9 +348,9 @@ class BilibiliWatcher(Star):
     @filter.command("bilihelp")
     async def help_command(self, event: AstrMessageEvent):
         """显示插件帮助信息"""
-        # 检查是否为唤醒命令
-        if event.is_at_or_wake_command:
-            return
+        # # 检查是否为唤醒命令
+        # if event.is_at_or_wake_command:
+        #     return
         
         help_text = (
             "🎬 B站监控插件 v1.0.0\n"
@@ -380,9 +380,9 @@ class BilibiliWatcher(Star):
 @filter.command("helloworld")
 async def helloworld(self, event: AstrMessageEvent):
     """测试命令"""
-    # 检查是否为唤醒命令
-    if event.is_at_or_wake_command:
-        return
+    # # 检查是否为唤醒命令
+    # if event.is_at_or_wake_command:
+    #     return
     
     user_name = event.get_sender_name()
     yield event.plain_result(f"Hello, {user_name}! B站监控插件已就绪。")
