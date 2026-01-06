@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
+from astrbot.api.event.filter import event_message_type, EventMessageType
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 
@@ -44,8 +45,8 @@ class BilibiliWatcher(Star):
             db_path = self.config.get('db_path', 'bilibili_watcher.db')
             self.db = DatabaseManager(db_path)
             
-            # 测试API连接
-            if self.api.test_connection():
+            # 测试API连接（异步）
+            if await self.api.test_connection():
                 logger.info("✓ B站API连接测试成功")
             else:
                 logger.warning("⚠ B站API连接测试失败，部分功能可能受限")
@@ -110,8 +111,8 @@ class BilibiliWatcher(Star):
             return {'success': False, 'message': '插件未正确初始化'}
         
         try:
-            # 获取用户点赞视频
-            videos = self.api.fetch_user_likes(uid)
+            # 获取用户点赞视频（异步）
+            videos = await self.api.fetch_user_likes(uid)
             
             if videos is None:
                 return {'success': False, 'message': '获取数据失败，可能是用户设置了隐私或网络问题'}
@@ -119,7 +120,7 @@ class BilibiliWatcher(Star):
             if not videos:
                 self.db.log_update(uid, 0, 'success')
                 return {
-                    'success': True, 
+                    'success': True,
                     'message': '用户没有点赞视频',
                     'count': 0,
                     'new_count': 0
@@ -163,7 +164,7 @@ class BilibiliWatcher(Star):
             return {'success': False, 'message': 'API未初始化'}
         
         try:
-            user_info = self.api.fetch_user_info(uid)
+            user_info = await self.api.fetch_user_info(uid)
             if not user_info:
                 return {'success': False, 'message': '获取用户信息失败'}
             
@@ -270,6 +271,7 @@ class BilibiliWatcher(Star):
         except:
             return "未知时间"
     
+    @event_message_type(EventMessageType.ALL)
     @filter.command("watch")
     async def watch_command(self, event: AstrMessageEvent):
         """
@@ -281,6 +283,10 @@ class BilibiliWatcher(Star):
           --recent N  显示最近N个点赞视频
           --help      显示帮助信息
         """
+        # 检查是否为唤醒命令
+        if event.is_at_or_wake_command:
+            return
+        
         message = event.message_str
         
         # 解析命令参数
@@ -338,9 +344,14 @@ class BilibiliWatcher(Star):
         
         yield event.plain_result(response)
     
+    @event_message_type(EventMessageType.ALL)
     @filter.command("bilihelp")
     async def help_command(self, event: AstrMessageEvent):
         """显示插件帮助信息"""
+        # 检查是否为唤醒命令
+        if event.is_at_or_wake_command:
+            return
+        
         help_text = (
             "🎬 B站监控插件 v1.0.0\n"
             "\n"
@@ -365,8 +376,13 @@ class BilibiliWatcher(Star):
 
 
 # 兼容性：保留原有的helloworld命令用于测试
+@event_message_type(EventMessageType.ALL)
 @filter.command("helloworld")
 async def helloworld(self, event: AstrMessageEvent):
     """测试命令"""
+    # 检查是否为唤醒命令
+    if event.is_at_or_wake_command:
+        return
+    
     user_name = event.get_sender_name()
     yield event.plain_result(f"Hello, {user_name}! B站监控插件已就绪。")
