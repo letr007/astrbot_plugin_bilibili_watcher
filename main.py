@@ -87,7 +87,7 @@ class BilibiliWatcher(Star):
             return None
         
         # 提取命令参数部分
-        cmd_text = cmd_text[7:].strip()  # 移除"/watch "
+        cmd_text = cmd_text[6:].strip()  # 移除"/watch "
         
         # 解析UID
         parts = cmd_text.split()
