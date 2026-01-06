@@ -78,7 +78,7 @@ class BilibiliWatcher(Star):
         /watch <uid> --stats            # 显示统计信息
         /watch <uid> --recent <n>       # 显示最近n个点赞
         """
-        pattern = r'^/watch\s+(\d+)(?:\s+(--\w+)(?:\s+(\d+))?)?$'
+        pattern = r'^watch\s+(\d+)(?:\s+(--\w+)(?:\s+(\d+))?)?$'
         match = re.match(pattern, message.strip())
         
         if not match:
@@ -288,6 +288,8 @@ class BilibiliWatcher(Star):
         #     return
         
         message = event.message_str
+
+        logger.info(f"收到/watch命令: {message}")
         
         # 解析命令参数
         params = self._parse_watch_command(message)
